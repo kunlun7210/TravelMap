@@ -89,7 +89,7 @@ dialog{width:min(420px,calc(100% - 32px));border:1px solid var(--line);border-ra
  </aside>
 </main>
 <footer>
- <div class="legend" aria-label="足迹状态"><span><i class="swatch visited"></i>去过 <b id="visitedCount">0</b></span><span><i class="swatch unvisited"></i>未去过 <b id="unvisitedCount">393</b></span></div>
+ <div id="mapLegend" class="legend" role="group" aria-label="省级行政区足迹状态"><span><i class="swatch visited"></i>去过 <b id="visitedCount">0</b></span><span><i class="swatch unvisited"></i>未去过 <b id="unvisitedCount">34</b></span></div>
  <p id="mapHint">点击省份进入，再点城市标记。</p><span id="saveStatus" role="status">保存在本机浏览器</span>
 </footer>
 </div>
@@ -557,8 +557,12 @@ window.TRAVEL_MAP_PROVINCES=[{"name":"北京市","short":"北京","ids":[0],"pat
   function updateStats() {
     const provinces = PROVINCES.filter(p => count(p) > 0).length;
     $('totalStats').textContent = `去过 ${visited.size} 个地区 · ${provinces} / 34 个省级行政区`;
-    $('visitedCount').textContent = visited.size;
-    $('unvisitedCount').textContent = units.length - visited.size;
+    const cityView = cityLayer();
+    const visitedTotal = cityView ? visited.size : provinces;
+    const regionTotal = cityView ? units.length : PROVINCES.length;
+    $('visitedCount').textContent = visitedTotal;
+    $('unvisitedCount').textContent = regionTotal - visitedTotal;
+    $('mapLegend').setAttribute('aria-label', cityView ? '城市／地区足迹状态' : '省级行政区足迹状态');
     $('viewTitle').textContent = current || '中国';
     $('btnBack').hidden = !current;
     $('btnPanelBack').hidden = !current && zoom === 1 && nationalMode === 'auto';

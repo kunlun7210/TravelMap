@@ -295,8 +295,12 @@
   function updateStats() {
     const provinces = PROVINCES.filter(p => count(p) > 0).length;
     $('totalStats').textContent = `去过 ${visited.size} 个地区 · ${provinces} / 34 个省级行政区`;
-    $('visitedCount').textContent = visited.size;
-    $('unvisitedCount').textContent = units.length - visited.size;
+    const cityView = cityLayer();
+    const visitedTotal = cityView ? visited.size : provinces;
+    const regionTotal = cityView ? units.length : PROVINCES.length;
+    $('visitedCount').textContent = visitedTotal;
+    $('unvisitedCount').textContent = regionTotal - visitedTotal;
+    $('mapLegend').setAttribute('aria-label', cityView ? '城市／地区足迹状态' : '省级行政区足迹状态');
     $('viewTitle').textContent = current || '中国';
     $('btnBack').hidden = !current;
     $('btnPanelBack').hidden = !current && zoom === 1 && nationalMode === 'auto';
