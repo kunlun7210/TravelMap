@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#f4f7f6">
+<meta name="description" content="点选去过的城市，在地图上记录自己的足迹。记录保存在当前浏览器，支持导入导出备份。">
+<title>足迹地图</title>
+<link rel="stylesheet" href="style.css">
+<script defer src="map-data.js"></script>
+<script defer src="poster.js"></script>
+<script defer src="app.js"></script>
+</head>
+<body>
+<div id="app">
+<header class="topbar">
+ <div class="brand"><span class="brand-icon" aria-hidden="true">⌁</span><div><h1>足迹地图</h1><p id="totalStats">正在加载地图…</p></div></div>
+ <div class="actions"><button id="btnList" class="mobile-only" aria-controls="placesPanel" aria-expanded="false">地区清单</button><button id="btnData">数据备份</button><button id="btnImage" aria-label="导出足迹成就图片"><span class="poster-button-desktop">成就图片</span><span class="poster-button-mobile">导出</span></button></div>
+</header>
+<main>
+ <section id="mapShell" aria-label="足迹地图">
+  <nav class="viewbar" aria-label="地图层级">
+   <button id="btnBack" class="back" hidden>← 全国</button>
+   <div class="view-heading"><h2 id="viewTitle">中国</h2><span id="viewStats">点击省级行政区进入</span></div>
+   <div class="map-controls"><button id="btnOut" aria-label="缩小地图">−</button><button id="btnFit" aria-label="重置地图视角">复位</button><button id="btnIn" aria-label="放大地图">＋</button></div>
+  </nav>
+  <div id="mapArea">
+   <div id="layerControl" class="layer-control" role="group" aria-label="全国地图层级">
+    <button type="button" data-map-layer="auto" aria-pressed="true" title="放大后自动显示地级市区块">自动</button>
+    <button type="button" data-map-layer="province" aria-pressed="false">省级</button>
+    <button type="button" data-map-layer="city" aria-pressed="false">地级市</button>
+   </div>
+   <svg id="map" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="中国省级行政区地图，亦可使用地区清单操作">
+    <rect id="mapBackground" fill="#f4f7f6" width="100%" height="100%"/>
+    <g id="mainMap"><g id="shapes"></g><g id="boundaryLines"></g><g id="labels" pointer-events="none"></g><g id="selection" pointer-events="none"></g></g>
+    <g id="southSea"></g><g id="smallRegions"></g>
+   </svg>
+   <div id="hoverTip" hidden></div>
+   <div id="emptyMap" hidden>地图数据未加载，请保留同目录中的 map-data.js 后重新打开。</div>
+  </div>
+ </section>
+ <aside id="placesPanel" aria-label="地区清单">
+  <div class="panel-head"><h2 id="listTitle">省级行政区</h2><div class="panel-actions"><button id="btnPanelBack" class="panel-back" hidden>← 返回全国</button><button id="btnCloseList" class="mobile-only" aria-label="关闭地区清单">×</button></div></div>
+  <label class="search-label" for="search">搜索省份或城市</label>
+  <input id="search" type="search" placeholder="搜索省份或城市" autocomplete="off">
+  <p id="listHint">选择一个省份，点选去过的城市。</p>
+  <div id="placesList"></div>
+  <div class="panel-bottom"><span id="listCount"></span><button id="btnClear" class="text-button">清空全部记录</button></div>
+ </aside>
+</main>
+<footer>
+ <div class="legend" aria-label="足迹状态"><span><i class="swatch visited"></i>去过 <b id="visitedCount">0</b></span><span><i class="swatch unvisited"></i>未去过 <b id="unvisitedCount">393</b></span></div>
+ <p id="mapHint">点击省份进入，再点城市标记。</p><span id="saveStatus" role="status">保存在本机浏览器</span>
+</footer>
+</div>
+<dialog id="posterDialog" aria-labelledby="posterTitle">
+ <div class="dialog-head"><div><h2 id="posterTitle">导出足迹成就</h2><p id="posterScope" class="muted"></p></div><button data-close="posterDialog" aria-label="关闭成就图片">×</button></div>
+ <div class="poster-layout">
+  <div class="poster-preview-wrap"><img id="posterPreview" alt="足迹成就图片预览"></div>
+  <div class="poster-settings">
+   <label for="posterFormat">导出画质</label>
+   <select id="posterFormat"><option value="png4">高清 PNG · 3072 × 4096</option><option value="png8">超高清 PNG · 6144 × 8192</option><option value="svg">SVG 矢量图 · 可无限放大</option></select>
+   <label class="poster-check"><input id="posterLabels" type="checkbox" checked>显示地名</label>
+   <p class="muted">全国市级图标注已到访城市；省内地图显示本省地名。</p>
+   <div class="poster-summary"><span>全国累计到访</span><strong id="posterSummary"></strong><small>城市统计包含自治州等独立记录地区。</small></div>
+   <button id="btnDownloadPoster" class="primary">下载成就图片</button>
+   <p id="posterExportStatus" class="poster-export-status" role="status">图片独立排版，清晰度不受当前窗口大小影响。</p>
+  </div>
+ </div>
+</dialog>
+<dialog id="dataDialog" aria-labelledby="dataTitle">
+ <div class="dialog-head"><h2 id="dataTitle">数据备份</h2><button data-close="dataDialog" aria-label="关闭数据备份">×</button></div>
+ <p>足迹自动保存在当前浏览器，不需要登录。换设备、换浏览器或清除网站数据前，请先导出备份。</p>
+ <button id="btnExport" class="primary">导出 JSON 备份</button><button id="btnImport">导入 JSON 备份</button>
+ <input id="importFile" type="file" accept="application/json,.json" hidden>
+ <p class="muted">导入会合并足迹，保留现有记录。兼容原版 TravelMap 备份：原来的到访状态统一转换为“去过”。</p>
+</dialog>
+<dialog id="clearDialog" aria-labelledby="clearTitle">
+ <div class="dialog-head"><h2 id="clearTitle">清空全部足迹？</h2><button data-close="clearDialog" aria-label="取消清空">×</button></div>
+ <p>所有地区将变为“未去过”。建议先导出备份；清空后可在提示中撤销。</p>
+ <div class="dialog-actions"><button data-close="clearDialog">取消</button><button id="btnConfirmClear" class="danger">清空记录</button></div>
+</dialog>
+<div id="toast" role="status" hidden><span id="toastMessage"></span><button id="btnUndo" hidden>撤销</button></div>
+<noscript>请开启 JavaScript 以使用足迹地图。</noscript>
+</body>
+</html>
