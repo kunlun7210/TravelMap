@@ -15,6 +15,9 @@
   }
   function linePath(points, close=false) {let s='';for(let i=0;i<points.length;i+=2)s+=(i?'L':'M')+points[i]+','+points[i+1];return s+(close?'Z':'');}
   function pathFor(unit) {return unit.path || unit.p.map(p=>linePath(decode(p),true)).join('');}
+  function cityLabel(unit) {
+    return unit.prov === '台湾省' && ['新竹', '嘉义'].includes(unit.short) ? unit.name : unit.short;
+  }
   function statistics(data, provinces, codes, provinceName) {
     const known=new Set(data.units.map(u=>u.code));
     const visited=new Set([...codes].filter(code=>known.has(code)));
@@ -59,7 +62,8 @@
       reserved.push([ix-8,iy-8,ix+iw+8,iy+ih+8]);
       const k=iw/data.inW,parts=[];
       data.units.filter(u=>u.f===1).forEach(u=>{
-        const fill=stats.visited.has(u.code)?COLORS.green:COLORS.paper;
+        const marked=isCity?stats.visited.has(u.code):provinces.find(q=>q.name===u.prov).ids.some(i=>stats.visited.has(data.units[i].code));
+        const fill=marked?COLORS.green:COLORS.paper;
         parts.push(tag('path',{d:pathFor(u),fill,stroke:COLORS.border,'stroke-width':.9/k}));
         (u.d||[]).forEach(pt=>parts.push(tag('circle',{cx:pt[0],cy:pt[1],r:2.1/k,fill,stroke:COLORS.border,'stroke-width':.6/k})));
       });
@@ -77,7 +81,7 @@
       if(isCity&&!p)ordered.forEach(u=>occupied.push([tx+u.b[0]*fit-2,ty+u.b[1]*fit-2,tx+u.b[2]*fit+2,ty+u.b[3]*fit+2]));
       const font=isCity?18:21;
       for(const item of ordered){
-        const sx=tx+item.cx*fit,sy=ty+item.cy*fit,label=item.short;
+        const sx=tx+item.cx*fit,sy=ty+item.cy*fit,label=isCity?cityLabel(item):item.short;
         const tw=label.length*font,th=font+6;
         const shifts=[[0,0],[0,-24],[0,24],[-tw/2-12,0],[tw/2+12,0],[-tw/2-10,-24],[tw/2+10,24],[0,-48],[0,48]];
         let chosen=null;
@@ -124,5 +128,5 @@
     const svg=tag('svg',{xmlns:'http://www.w3.org/2000/svg',width:pixelWidth,height:pixelHeight,viewBox:`0 0 ${W} ${H}`,'font-family':'PingFang SC,Microsoft YaHei,Arial,sans-serif','shape-rendering':'geometricPrecision'},content);
     return {svg,stats,title,scope,description};
   }
-  root.FootprintPoster={build,statistics,FORMATS};
+  root.FootprintPoster={build,statistics,cityLabel,FORMATS};
 })(typeof window==='undefined'?globalThis:window);

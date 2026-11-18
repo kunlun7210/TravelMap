@@ -10,6 +10,7 @@
   const STORAGE_KEY = 'travelmap_visited_v1';
   const CITY_ZOOM = 2;
   const units = DATA.units;
+  const unitByCode = new Map(units.map(u => [u.code, u]));
   const known = new Set(units.map(u => u.code));
   const provinceByName = new Map(PROVINCES.map(p => [p.name, p]));
   let visited = new Set(), current = null, selected = null, undo = null;
@@ -156,7 +157,7 @@
         units.forEach(u => {
           if (u.f !== 0) return;
           addShape(u.code, u.path);
-          addLabel(u.short, u.cx, u.cy, 'city-label', u.code, u.b);
+          addLabel(FootprintPoster.cityLabel(u), u.cx, u.cy, 'city-label', u.code, u.b);
         });
         // Keep province boundaries visible above city blocks.
         PROVINCES.forEach(p => $('boundaryLines').appendChild(svg('path', { d: p.path, fill: 'none', stroke: '#638671',
@@ -176,7 +177,7 @@
         const u = units[i];
         if (u.f !== 0) return;
         addShape(u.code, u.path);
-        addLabel(u.short, u.cx, u.cy, 'city-label', u.code, u.b);
+        addLabel(FootprintPoster.cityLabel(u), u.cx, u.cy, 'city-label', u.code, u.b);
       });
       if (current === '海南省') buildInset();
     }
@@ -191,13 +192,13 @@
     const inner = svg('g');
     root.appendChild(inner);
     units.filter(u => u.f === 1).forEach(u => {
-      const path = svg('path', { d: u.path, fill: visited.has(u.code) ? COLOR.visited : COLOR.empty,
+      const path = svg('path', { d: u.path, fill: isVisited(cityLayer() ? u.code : u.prov) ? COLOR.visited : COLOR.empty,
         stroke: COLOR.border, 'stroke-width': .8, 'vector-effect': 'non-scaling-stroke', 'data-city': u.code });
       inner.appendChild(path);
-      (u.d || []).forEach(p => inner.appendChild(svg('circle', { cx: p[0], cy: p[1], r: 16, fill: visited.has(u.code) ? COLOR.visited : COLOR.empty, stroke: COLOR.border, 'stroke-width': .6, 'vector-effect': 'non-scaling-stroke', 'data-city': u.code })));
+      (u.d || []).forEach(p => inner.appendChild(svg('circle', { cx: p[0], cy: p[1], r: 16, fill: isVisited(cityLayer() ? u.code : u.prov) ? COLOR.visited : COLOR.empty, stroke: COLOR.border, 'stroke-width': .6, 'vector-effect': 'non-scaling-stroke', 'data-city': u.code })));
     });
     DATA.jdInset.forEach(s => inner.appendChild(svg('path', { d: ringPath(decode(s), false), fill: 'none', stroke: '#719b89', 'stroke-width': .8, 'vector-effect': 'non-scaling-stroke' })));
-    const text = svg('text', { 'text-anchor': 'middle', fill: '#718078', 'font-size': 9 });
+    const text = svg('text', { 'text-anchor': 'middle', fill: '#718078', 'font-size': 9, 'pointer-events': 'none' });
     text.textContent = '南海诸岛'; root.appendChild(text);
     inset = { root, inner, text };
   }
@@ -289,15 +290,16 @@
   }
   function updateColors() {
     shapeNodes.forEach((node, key) => node.setAttribute('fill', isVisited(key) ? COLOR.visited : COLOR.empty));
-    $('southSea').querySelectorAll('[data-city]').forEach(n => n.setAttribute('fill', visited.has(n.getAttribute('data-city')) ? COLOR.visited : COLOR.empty));
+    $('southSea').querySelectorAll('[data-city]').forEach(n => n.setAttribute('fill', isVisited(cityLayer() ? n.dataset.city : unitByCode.get(n.dataset.city).prov) ? COLOR.visited : COLOR.empty));
     layoutSmallRegions(); updateTransform();
   }
   function updateStats() {
     const provinces = PROVINCES.filter(p => count(p) > 0).length;
     $('totalStats').textContent = `去过 ${visited.size} 个地区 · ${provinces} / 34 个省级行政区`;
     const cityView = cityLayer();
-    const visitedTotal = cityView ? visited.size : provinces;
-    const regionTotal = cityView ? units.length : PROVINCES.length;
+    const province = provinceByName.get(current);
+    const visitedTotal = province ? count(province) : cityView ? visited.size : provinces;
+    const regionTotal = province ? province.ids.length : cityView ? units.length : PROVINCES.length;
     $('visitedCount').textContent = visitedTotal;
     $('unvisitedCount').textContent = regionTotal - visitedTotal;
     $('mapLegend').setAttribute('aria-label', cityView ? '城市／地区足迹状态' : '省级行政区足迹状态');
@@ -367,30 +369,15 @@
     if (activeCity) list.querySelector(`[data-city="${activeCity}"]`)?.focus({ preventScroll: true });
   }
 
-  function inRing(x, y, r) {
-    let inside = false;
-    for (let i = 0, j = r.length / 2 - 1; i < r.length / 2; j = i++) {
-      const xi = r[i * 2], yi = r[i * 2 + 1], xj = r[j * 2], yj = r[j * 2 + 1];
-      if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) inside = !inside;
-    }
-    return inside;
-  }
-  function hitTest(x, y) {
-    if (inset && x >= inset.x && x <= inset.x + inset.w && y >= inset.y && y <= inset.y + inset.h) return units.find(u => u.f === 1);
-    const mx = (x - tx) / scale, my = (y - ty) / scale;
-    const candidates = current ? provinceByName.get(current).ids.map(i => units[i]) : units;
-    // Exact polygon hit takes precedence; small-region tolerance is only a fallback.
-    for (let i = candidates.length - 1; i >= 0; i--) {
-      const u = candidates[i]; if (u.f || mx < u.b[0] || mx > u.b[2] || my < u.b[1] || my > u.b[3]) continue;
-      if (u.rings.some(r => inRing(mx, my, r))) return u;
-    }
-    let closest = null, distance = 9;
-    for (const u of candidates) {
-      if (u.f || Math.min(u.b[2] - u.b[0], u.b[3] - u.b[1]) * scale > 12) continue;
-      const d = Math.hypot(tx + u.cx * scale - x, ty + u.cy * scale - y);
-      if (d < distance) { closest = u; distance = d; }
-    }
-    return closest;
+  function hitTest(clientX, clientY) {
+    const target = document.elementFromPoint(clientX, clientY);
+    if (!map.contains(target)) return null;
+    const shortcut = target.closest('[data-province-shortcut]');
+    if (shortcut) return { prov: shortcut.dataset.provinceShortcut, shortcut: true };
+    if (target.closest('#southSea')) return unitByCode.get(target.dataset.city) || null;
+    const key = target.dataset.region;
+    if (key) return unitByCode.get(key) || { prov: key };
+    return null;
   }
   const pointers = new Map();
   let gestureMoved = false, movement = 0, last = null, lastPinch = null;
@@ -402,12 +389,12 @@
     map.setPointerCapture(e.pointerId); map.classList.add('dragging');
   });
   map.addEventListener('pointermove', e => {
-    const rect = map.getBoundingClientRect(), x = e.clientX - rect.left, y = e.clientY - rect.top;
+    const rect = map.getBoundingClientRect();
     if (!pointers.has(e.pointerId)) {
       if (e.pointerType === 'touch') return;
-      const hit = hitTest(x, y);
+      const hit = hitTest(e.clientX, e.clientY);
       $('hoverTip').hidden = !hit;
-      if (hit) $('hoverTip').textContent = cityLayer() ? hit.name + ' · ' + (visited.has(hit.code) ? '去过，点击取消' : '未去过，点击标记') : hit.prov + ' · 点击进入';
+      if (hit) $('hoverTip').textContent = cityLayer() && !hit.shortcut ? hit.name + ' · ' + (visited.has(hit.code) ? '去过，点击取消' : '未去过，点击标记') : hit.prov + ' · 点击进入';
       return;
     }
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -431,11 +418,8 @@
     if (!pointers.size) { last = null; map.classList.remove('dragging'); }
     else { last = [...pointers.values()][0]; gestureMoved = true; }
     if (!tap) return;
-    const rect = map.getBoundingClientRect(), x = e.clientX-rect.left, y = e.clientY-rect.top;
-    const shortcut = document.elementFromPoint(e.clientX,e.clientY)?.closest('[data-province-shortcut]');
-    if (shortcut) { enterProvince(shortcut.getAttribute('data-province-shortcut')); return; }
-    const hit = hitTest(x,y);
-    if (hit) cityLayer() ? toggleCity(hit.code) : enterProvince(hit.prov);
+    const hit = hitTest(e.clientX, e.clientY);
+    if (hit) cityLayer() && !hit.shortcut ? toggleCity(hit.code) : enterProvince(hit.prov);
   }
   map.addEventListener('pointerup', e => endPointer(e));
   map.addEventListener('pointercancel', e => endPointer(e,true));
